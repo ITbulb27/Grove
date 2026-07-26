@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grove — a habit log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="topbar">
+      <button id="themeToggle" class="icon-btn" aria-label="Switch to light mode" title="Switch theme">
+        <span id="themeIcon">☾</span>
+      </button>
+      <button id="exportBtn" class="icon-btn" aria-label="Export your data" title="Export as JSON">⇩</button>
+    </div>
+
+    <div class="hero">
+      <div class="eyebrow">ITbulb</div>
+      <h1>Grove</h1>
+      <p class="sub">A quiet place to log what you're growing. Check off a day when it happens — the ring fills in as the week does.</p>
+
+      <div class="add-row">
+        <input id="input" type="text" placeholder="Add something you're growing…" maxlength="40" />
+        <select id="category" aria-label="Category">
+          <option value="health">Health</option>
+          <option value="work">Work</option>
+          <option value="learning">Learning</option>
+          <option value="other" selected>Other</option>
+        </select>
+        <button id="addBtn">Plant</button>
+      </div>
+    </div>
+
+    <div id="summary" class="summary" style="display:none;"></div>
+
+    <div id="list" class="list"></div>
+    <div id="empty" class="empty" style="display:none;">
+      <div class="glyph">✳</div>
+      <p>Nothing planted yet. Add a habit above to start this week's log.</p>
+    </div>
+
+    <div class="note">Saved to this browser automatically — clear your browser data and the log resets. Nothing leaves your device.</div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
