@@ -215,6 +215,7 @@ body {
   border-radius: 12px;
   padding: 14px 16px;
 }
+.history-week.current { border-color: var(--gold); background: var(--gold-soft); }
 .history-week-range {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 11px;
@@ -222,6 +223,7 @@ body {
   color: var(--muted);
   margin-bottom: 10px;
 }
+.history-week.current .history-week-range { color: var(--gold); }
 .history-habit {
   display: flex;
   align-items: center;
@@ -252,6 +254,7 @@ body {
   background: var(--line);
 }
 .history-habit .hbar span.done { background: var(--gold); }
+.history-habit .hbar span.today { box-shadow: 0 0 0 1px var(--muted); }
 
 /* Hero */
 .hero { margin-bottom: 28px; }

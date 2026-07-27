@@ -380,20 +380,35 @@
     const p = profiles.find(x => x.id === activeProfileId);
     historyProfileName.textContent = p ? p.name : 'You';
     historyList.innerHTML = '';
-    const weeks = data.history;
+
+    // the current, still-in-progress week — shown live so people don't have to
+    // wait until next Monday to see it show up here
+    const liveWeek = habits.length ? {
+      weekStart: data.weekStart,
+      current: true,
+      habits: habits.map(h => ({
+        name: h.name,
+        category: h.category,
+        days: h.days.slice(),
+        doneCount: h.days.filter(Boolean).length
+      }))
+    } : null;
+
+    const weeks = liveWeek ? [liveWeek, ...data.history] : data.history;
     historyEmpty.style.display = weeks.length ? 'none' : 'block';
     weeks.forEach(week => {
       const wrap = document.createElement('div');
-      wrap.className = 'history-week';
+      wrap.className = 'history-week' + (week.current ? ' current' : '');
       const habitsHtml = week.habits.map(h => `
         <div class="history-habit">
           <span class="tag ${h.category || 'other'}"></span>
           <span class="hname">${escapeHtml(h.name)}</span>
-          <span class="hbar">${h.days.map(d => `<span class="${d ? 'done' : ''}"></span>`).join('')}</span>
+          <span class="hbar">${h.days.map((d, i) => `<span class="${d ? 'done' : ''} ${week.current && i === todayIdx ? 'today' : ''}"></span>`).join('')}</span>
           <span class="hcount ${h.doneCount === 7 ? 'full' : ''}">${h.doneCount}/7</span>
         </div>
       `).join('');
-      wrap.innerHTML = `<div class="history-week-range">${weekRangeLabel(week.weekStart)}</div>${habitsHtml}`;
+      const label = week.current ? `${weekRangeLabel(week.weekStart)} · this week` : weekRangeLabel(week.weekStart);
+      wrap.innerHTML = `<div class="history-week-range">${label}</div>${habitsHtml}`;
       historyList.appendChild(wrap);
     });
   }
