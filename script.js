@@ -1,11 +1,16 @@
 (function(){
   const DAY_LABELS = ['M','T','W','T','F','S','S'];
   const todayIdx = (new Date().getDay() + 6) % 7; // Monday = 0
-  const STORAGE_KEY = 'grove-habits-v1';
   const THEME_KEY = 'grove-theme-v1';
+  const PROFILES_KEY = 'grove-profiles-v1';
+  const ACTIVE_PROFILE_KEY = 'grove-active-profile-v1';
+  const dataKey = (profileId) => `grove-data-v1-${profileId}`;
 
-  let habits = loadHabits();
-  let nextId = habits.reduce((m, h) => Math.max(m, h.id), 0) + 1;
+  let profiles = [];
+  let activeProfileId = null;
+  let data = null; // { habits, weekStart, history }
+  let habits = [];
+  let nextId = 1;
   let dragId = null;
   let lastRemoved = null;
   let toastTimer = null;
@@ -21,27 +26,139 @@
   const exportBtn = document.getElementById('exportBtn');
   const toastEl = document.getElementById('toast');
 
-  // ---------- persistence ----------
-  function loadHabits(){
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return defaultHabits();
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || !parsed.length) return defaultHabits();
-      return parsed;
-    } catch (e) {
-      return defaultHabits();
-    }
+  const profileBtn = document.getElementById('profileBtn');
+  const profileMenu = document.getElementById('profileMenu');
+  const profileList = document.getElementById('profileList');
+  const profileNameEl = document.getElementById('profileName');
+  const newProfileInput = document.getElementById('newProfileInput');
+  const addProfileBtn = document.getElementById('addProfileBtn');
+
+  const historyBtn = document.getElementById('historyBtn');
+  const historyModal = document.getElementById('historyModal');
+  const closeHistory = document.getElementById('closeHistory');
+  const historyList = document.getElementById('historyList');
+  const historyEmpty = document.getElementById('historyEmpty');
+  const historyProfileName = document.getElementById('historyProfileName');
+
+  // ---------- date helpers ----------
+  function toISODate(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
+  function currentWeekStart(){
+    const now = new Date();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - todayIdx);
+    return toISODate(monday);
+  }
+  function weekRangeLabel(weekStartISO){
+    const start = new Date(weekStartISO + 'T00:00:00');
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    const opts = { month: 'short', day: 'numeric' };
+    return `${start.toLocaleDateString(undefined, opts)} \u2013 ${end.toLocaleDateString(undefined, opts)}`;
+  }
+
+  // ---------- profiles ----------
+  function loadProfiles(){
+    try {
+      const raw = localStorage.getItem(PROFILES_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch (e) { /* fall through */ }
+    const def = [{ id: 'default', name: 'You' }];
+    saveProfiles(def);
+    return def;
+  }
+  function saveProfiles(list){
+    try { localStorage.setItem(PROFILES_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+  function loadActiveProfileId(){
+    let id = null;
+    try { id = localStorage.getItem(ACTIVE_PROFILE_KEY); } catch (e) {}
+    if (!id || !profiles.some(p => p.id === id)) id = profiles[0].id;
+    return id;
+  }
+  function saveActiveProfileId(id){
+    try { localStorage.setItem(ACTIVE_PROFILE_KEY, id); } catch (e) {}
+  }
+  function makeProfileId(){
+    return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  // ---------- per-profile data ----------
   function defaultHabits(){
     return [
       { id: 1, name: 'Morning walk', category: 'health', note: '', days: [true, true, false, true, false, false, false], best: 2 },
       { id: 2, name: 'Read 20 minutes', category: 'learning', note: '', days: [true, false, false, false, false, false, false], best: 1 },
     ];
   }
-  function saveHabits(){
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(habits)); }
+  function defaultData(){
+    return { habits: defaultHabits(), weekStart: currentWeekStart(), history: [] };
+  }
+  const LEGACY_HABITS_KEY = 'grove-habits-v1';
+  function loadProfileData(profileId){
+    try {
+      const raw = localStorage.getItem(dataKey(profileId));
+      if (!raw) {
+        // migrate pre-profile data (single habit list) into the default profile once
+        if (profileId === 'default') {
+          try {
+            const legacyRaw = localStorage.getItem(LEGACY_HABITS_KEY);
+            const legacy = legacyRaw ? JSON.parse(legacyRaw) : null;
+            if (Array.isArray(legacy) && legacy.length) {
+              return { habits: legacy, weekStart: currentWeekStart(), history: [] };
+            }
+          } catch (e) {}
+        }
+        return defaultData();
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.habits)) return defaultData();
+      if (!Array.isArray(parsed.history)) parsed.history = [];
+      if (!parsed.weekStart) parsed.weekStart = currentWeekStart();
+      return parsed;
+    } catch (e) {
+      return defaultData();
+    }
+  }
+  function saveProfileData(){
+    try { localStorage.setItem(dataKey(activeProfileId), JSON.stringify(data)); }
     catch (e) { /* storage unavailable — fail silently, app still works in-memory */ }
+  }
+
+  function archiveWeekIfNeeded(){
+    const nowWeek = currentWeekStart();
+    if (data.weekStart === nowWeek) return;
+    if (data.habits.length){
+      data.history.unshift({
+        weekStart: data.weekStart,
+        habits: data.habits.map(h => ({
+          name: h.name,
+          category: h.category,
+          days: h.days.slice(),
+          doneCount: h.days.filter(Boolean).length
+        }))
+      });
+      if (data.history.length > 52) data.history.length = 52;
+    }
+    data.habits.forEach(h => { h.days = [false,false,false,false,false,false,false]; });
+    data.weekStart = nowWeek;
+  }
+
+  function switchToProfile(profileId){
+    activeProfileId = profileId;
+    saveActiveProfileId(profileId);
+    data = loadProfileData(profileId);
+    archiveWeekIfNeeded();
+    habits = data.habits;
+    nextId = habits.reduce((m, h) => Math.max(m, h.id), 0) + 1;
+    saveProfileData();
+    const p = profiles.find(x => x.id === profileId);
+    profileNameEl.textContent = p ? p.name : 'You';
+    render();
   }
 
   // ---------- theme ----------
@@ -51,7 +168,7 @@
   }
   function applyTheme(theme){
     document.documentElement.setAttribute('data-theme', theme);
-    themeIcon.textContent = theme === 'light' ? '☀' : '☾';
+    themeIcon.textContent = theme === 'light' ? '\u2600' : '\u263e';
     themeToggle.setAttribute('aria-label', theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
     try { localStorage.setItem(THEME_KEY, theme); } catch(e) {}
   }
@@ -108,12 +225,11 @@
     toastEl.classList.remove('show');
   }
 
-  // ---------- render ----------
+  // ---------- render: habit list ----------
   function render(justCompletedId){
     listEl.innerHTML = '';
     emptyEl.style.display = habits.length ? 'none' : 'block';
 
-    // weekly summary
     if (habits.length){
       const completedCount = habits.filter(h => h.days.filter(Boolean).length === 7).length;
       summaryEl.style.display = 'block';
@@ -138,7 +254,7 @@
             <span class="tag ${h.category || 'other'}"></span>
             <p class="card-title" data-id="${h.id}" title="Click to rename">${escapeHtml(h.name)}</p>
           </div>
-          <input class="note-input" data-id="${h.id}" placeholder="Add a note…" value="${escapeHtml(h.note || '')}" maxlength="80" />
+          <input class="note-input" data-id="${h.id}" placeholder="Add a note\u2026" value="${escapeHtml(h.note || '')}" maxlength="80" />
           <div class="days">
             ${h.days.map((done, i) => `
               <button class="day ${done ? 'done' : ''} ${i === todayIdx ? 'today' : ''}"
@@ -159,6 +275,140 @@
     });
   }
 
+  // ---------- render: profile menu ----------
+  function renderProfileMenu(){
+    profileList.innerHTML = '';
+    profiles.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'profile-row' + (p.id === activeProfileId ? ' active' : '');
+      row.dataset.id = p.id;
+      row.innerHTML = `
+        <span class="radio"></span>
+        <span class="pname" data-id="${p.id}">${escapeHtml(p.name)}</span>
+        <span class="prow-actions">
+          <button type="button" data-rename="${p.id}" title="Rename">\u270e</button>
+          ${profiles.length > 1 ? `<button type="button" class="danger" data-delprofile="${p.id}" title="Delete">\u2715</button>` : ''}
+        </span>
+      `;
+      profileList.appendChild(row);
+    });
+  }
+
+  function openProfileMenu(){
+    renderProfileMenu();
+    profileMenu.hidden = false;
+    profileBtn.setAttribute('aria-expanded', 'true');
+  }
+  function closeProfileMenu(){
+    profileMenu.hidden = true;
+    profileBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  profileBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (profileMenu.hidden) openProfileMenu(); else closeProfileMenu();
+  });
+  document.addEventListener('click', (e) => {
+    if (!profileMenu.hidden && !profileMenu.contains(e.target) && e.target !== profileBtn) closeProfileMenu();
+  });
+
+  profileList.addEventListener('click', (e) => {
+    const renameBtn = e.target.closest('[data-rename]');
+    if (renameBtn){
+      const id = renameBtn.dataset.rename;
+      const span = profileList.querySelector(`.pname[data-id="${id}"]`);
+      const current = span.textContent;
+      const editInput = document.createElement('input');
+      editInput.className = 'pname';
+      editInput.value = current;
+      editInput.maxLength = 24;
+      span.replaceWith(editInput);
+      editInput.focus();
+      editInput.select();
+      const commit = () => {
+        const val = editInput.value.trim() || current;
+        const p = profiles.find(x => x.id === id);
+        if (p) p.name = val;
+        saveProfiles(profiles);
+        if (id === activeProfileId) profileNameEl.textContent = val;
+        renderProfileMenu();
+      };
+      editInput.addEventListener('blur', commit);
+      editInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') editInput.blur(); });
+      editInput.addEventListener('click', (ev) => ev.stopPropagation());
+      return;
+    }
+    const delBtn = e.target.closest('[data-delprofile]');
+    if (delBtn){
+      const id = delBtn.dataset.delprofile;
+      if (profiles.length <= 1) return;
+      const p = profiles.find(x => x.id === id);
+      const wasActive = id === activeProfileId;
+      profiles = profiles.filter(x => x.id !== id);
+      saveProfiles(profiles);
+      try { localStorage.removeItem(dataKey(id)); } catch(err) {}
+      showToast(`Deleted profile "${p ? p.name : ''}"`, { duration: 3000 });
+      if (wasActive){
+        switchToProfile(profiles[0].id);
+      }
+      renderProfileMenu();
+      return;
+    }
+    const row = e.target.closest('.profile-row');
+    if (row && row.dataset.id !== activeProfileId){
+      switchToProfile(row.dataset.id);
+      closeProfileMenu();
+    }
+  });
+
+  function addProfile(){
+    const name = newProfileInput.value.trim();
+    if (!name) { newProfileInput.focus(); return; }
+    const p = { id: makeProfileId(), name };
+    profiles.push(p);
+    saveProfiles(profiles);
+    newProfileInput.value = '';
+    switchToProfile(p.id);
+    renderProfileMenu();
+    showToast(`Added profile "${name}"`, { duration: 3000 });
+  }
+  addProfileBtn.addEventListener('click', addProfile);
+  newProfileInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addProfile(); });
+
+  // ---------- history modal ----------
+  function renderHistory(){
+    const p = profiles.find(x => x.id === activeProfileId);
+    historyProfileName.textContent = p ? p.name : 'You';
+    historyList.innerHTML = '';
+    const weeks = data.history;
+    historyEmpty.style.display = weeks.length ? 'none' : 'block';
+    weeks.forEach(week => {
+      const wrap = document.createElement('div');
+      wrap.className = 'history-week';
+      const habitsHtml = week.habits.map(h => `
+        <div class="history-habit">
+          <span class="tag ${h.category || 'other'}"></span>
+          <span class="hname">${escapeHtml(h.name)}</span>
+          <span class="hbar">${h.days.map(d => `<span class="${d ? 'done' : ''}"></span>`).join('')}</span>
+          <span class="hcount ${h.doneCount === 7 ? 'full' : ''}">${h.doneCount}/7</span>
+        </div>
+      `).join('');
+      wrap.innerHTML = `<div class="history-week-range">${weekRangeLabel(week.weekStart)}</div>${habitsHtml}`;
+      historyList.appendChild(wrap);
+    });
+  }
+  function openHistory(){
+    renderHistory();
+    historyModal.hidden = false;
+  }
+  function hideHistory(){
+    historyModal.hidden = true;
+  }
+  historyBtn.addEventListener('click', openHistory);
+  closeHistory.addEventListener('click', hideHistory);
+  historyModal.addEventListener('click', (e) => { if (e.target === historyModal) hideHistory(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !historyModal.hidden) hideHistory(); });
+
   // ---------- actions ----------
   function toggleDay(id, day){
     const h = habits.find(x => x.id === id);
@@ -166,21 +416,21 @@
     const streak = computeStreak(h.days);
     h.best = Math.max(h.best || 0, streak);
     const justCompleted = h.days.filter(Boolean).length === 7 ? id : null;
-    saveHabits();
+    saveProfileData();
     render(justCompleted);
   }
 
   function renameHabit(id, name){
     const h = habits.find(x => x.id === id);
     if (name.trim()) h.name = name.trim();
-    saveHabits();
+    saveProfileData();
     render();
   }
 
   function updateNote(id, note){
     const h = habits.find(x => x.id === id);
     h.note = note;
-    saveHabits();
+    saveProfileData();
   }
 
   function removeHabit(id){
@@ -188,13 +438,13 @@
     if (idx === -1) return;
     lastRemoved = { habit: habits[idx], index: idx };
     habits.splice(idx, 1);
-    saveHabits();
+    saveProfileData();
     render();
     showToast(`Removed "${lastRemoved.habit.name}"`, {
       actionLabel: 'Undo',
       onAction: () => {
         habits.splice(lastRemoved.index, 0, lastRemoved.habit);
-        saveHabits();
+        saveProfileData();
         render();
       }
     });
@@ -212,16 +462,19 @@
       best: 0
     });
     input.value = '';
-    saveHabits();
+    saveProfileData();
     render();
   }
 
   function exportData(){
-    const blob = new Blob([JSON.stringify(habits, null, 2)], { type: 'application/json' });
+    const p = profiles.find(x => x.id === activeProfileId);
+    const payload = { profile: p ? p.name : 'You', weekStart: data.weekStart, habits, history: data.history };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'grove-habits.json';
+    const safeName = (p ? p.name : 'grove').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'grove';
+    a.download = `grove-habits-${safeName}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -292,12 +545,23 @@
   });
   listEl.addEventListener('drop', (e) => {
     e.preventDefault();
-    saveHabits();
+    saveProfileData();
   });
 
   addBtn.addEventListener('click', addHabit);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') addHabit(); });
   exportBtn.addEventListener('click', exportData);
 
+  // ---------- init ----------
+  profiles = loadProfiles();
+  activeProfileId = loadActiveProfileId();
+  saveActiveProfileId(activeProfileId);
+  data = loadProfileData(activeProfileId);
+  archiveWeekIfNeeded();
+  habits = data.habits;
+  nextId = habits.reduce((m, h) => Math.max(m, h.id), 0) + 1;
+  saveProfileData();
+  const activeP = profiles.find(x => x.id === activeProfileId);
+  profileNameEl.textContent = activeP ? activeP.name : 'You';
   render();
 })();

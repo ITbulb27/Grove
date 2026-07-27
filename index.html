@@ -14,6 +14,23 @@
   <div class="wrap">
 
     <div class="topbar">
+      <div class="profile-switch">
+        <button id="profileBtn" class="icon-btn profile-btn" aria-haspopup="true" aria-expanded="false" title="Switch profile">
+          <span class="profile-dot">◍</span>
+          <span id="profileName">You</span>
+          <span class="chev">▾</span>
+        </button>
+        <div id="profileMenu" class="profile-menu" hidden>
+          <div id="profileList" class="profile-list"></div>
+          <div class="profile-menu-divider"></div>
+          <div class="profile-new-row">
+            <input id="newProfileInput" type="text" placeholder="New profile name…" maxlength="24" />
+            <button id="addProfileBtn">Add</button>
+          </div>
+        </div>
+      </div>
+      <div class="topbar-spacer"></div>
+      <button id="historyBtn" class="icon-btn" aria-label="View history" title="View past weeks">🕘</button>
       <button id="themeToggle" class="icon-btn" aria-label="Switch to light mode" title="Switch theme">
         <span id="themeIcon">☾</span>
       </button>
@@ -45,17 +62,30 @@
       <p>Nothing planted yet. Add a habit above to start this week's log.</p>
     </div>
 
-    <div class="note">Saved to this browser automatically — clear your browser data and the log resets. Nothing leaves your device.</div>
+    <div class="note">Saved to this browser automatically — clear your browser data and the log resets. Nothing leaves your device. Profiles just split the local storage — anyone with this browser can switch between them.</div>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="historyModal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h2>History — <span id="historyProfileName">You</span></h2>
+        <button id="closeHistory" class="icon-btn" aria-label="Close history">✕</button>
+      </div>
+      <div id="historyList" class="history-list"></div>
+      <div id="historyEmpty" class="empty" style="display:none;">
+        <div class="glyph">🕘</div>
+        <p>No past weeks yet. Once a week finishes, it'll show up here.</p>
+      </div>
+    </div>
+  </div>
 
   <script>
   window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
 </script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
 <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
-<script src="script.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
