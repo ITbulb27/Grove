@@ -176,6 +176,7 @@ body {
   padding: 8vh 20px 20px;
   z-index: 30;
 }
+.modal-overlay[hidden] { display: none; }
 :root[data-theme="light"] .modal-overlay { background: rgba(30,42,34,0.35); }
 .modal {
   background: var(--surface);
